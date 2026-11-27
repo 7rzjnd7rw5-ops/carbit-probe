@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>传到 NAS</title>
+<style>
+body{background:#12161c;color:#d7dee8;font:14px/1.7 -apple-system,system-ui,"PingFang SC",sans-serif;margin:0;padding:22px;max-width:640px}
+h1{font-size:17px;margin:0 0 6px}
+p.hint{color:#6b7684;font-size:12px;margin:0 0 16px}
+.box{border:1px dashed #39424f;border-radius:12px;padding:30px 20px;text-align:center;background:#171c23;cursor:pointer}
+.box b{color:#8fb6ff;font-size:15px}
+.box span{display:block;color:#6b7684;font-size:12px;margin-top:6px}
+.bar{height:4px;background:#1f2731;border-radius:3px;margin-top:14px;overflow:hidden;display:none}
+.bar>i{display:block;height:100%;width:0;background:#2f7df6;transition:width .2s}
+#log{margin-top:16px;font:12px/1.8 ui-monospace,Menlo,monospace;white-space:pre-wrap;color:#9fb0c3}
+</style>
+<h1>传到 NAS</h1>
+<p class="hint">点一下选文件，选完自动开始传。适合传 APK、日志、截图。地址里的 # 后面是令牌，别外发。</p>
+<div class="box" id="pick">
+  <b>选择文件</b>
+  <span>点这里 · 或直接拖进来</span>
+  <div class="bar" id="bar"><i></i></div>
+</div>
+<div id="log"></div>
+<script>
+var TK = location.hash.slice(1).trim();
+var logEl = document.getElementById('log');
+var barEl = document.getElementById('bar');
+var fill = barEl.firstElementChild;
+function log(m){ logEl.textContent += m + "\n"; }
+function pick(){
+  if (!TK) { log("⚠ 地址缺少 #令牌，无法上传"); return; }
+  var i = Object.assign(document.createElement('input'), {type:'file'});
+  i.onchange = function(){ if (i.files[0]) up(i.files[0]); };
+  i.click();
+}
+document.getElementById('pick').onclick = pick;
+document.getElementById('pick').ondragover = function(e){ e.preventDefault(); };
+document.getElementById('pick').ondrop = function(e){
+  e.preventDefault();
+  if (e.dataTransfer.files[0]) up(e.dataTransfer.files[0]);
+};
+function up(f){
+  if (!TK) { log("⚠ 地址缺少 #令牌"); return; }
+  log("↑ " + f.name + "  " + (f.size/1048576).toFixed(1) + " MB");
+  barEl.style.display = 'block';
+  fill.style.width = '0';
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', '/carbit/upload?name=' + encodeURIComponent(f.name) + '&token=' + encodeURIComponent(TK));
+  xhr.upload.onprogress = function(e){
+    if (e.lengthComputable) fill.style.width = (e.loaded / e.total * 100).toFixed(1) + '%';
+  };
+  xhr.onload = function(){
+    fill.style.width = '100%';
+    log("HTTP " + xhr.status + "  " + xhr.responseText);
+    if (xhr.status === 200) log("✅ 传完了，目录 /share/Download/CarbitProbe/logs/");
+  };
+  xhr.onerror = function(){ log("✗ 网络错误（外网地址错了或 NAS 没连上）"); };
+  xhr.send(f);
+}
+if (!TK) log("⚠ 请在地址后面加 #令牌，例：/carbit-upload.html#YOUR_TOKEN_HERE");
+</script>
+</html>

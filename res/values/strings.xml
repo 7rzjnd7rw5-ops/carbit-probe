@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">极享</string>
+    <string name="touch_bridge_desc">把投屏画面上的点击送进手机系统（含输入法键盘）。不开也能点，但键盘上的字母点不动。</string>
+</resources>

@@ -1,0 +1,19 @@
+# 构建产物
+build/
+*.apk
+*.idsig
+*.dex
+
+# 签名与密钥，绝不入库
+*.jks
+*.keystore
+*.p12
+
+# 本机私有配置
+local.properties
+*.local
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
