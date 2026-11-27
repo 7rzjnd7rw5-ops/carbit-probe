@@ -101,12 +101,10 @@ public class MainActivity extends Activity implements Net.Log {
         line("极享 · 车机投屏  v" + vn + " — 手机画面投到摩托仪表，音频留在本机");
         line(TouchBridgeService.ready() ? "· 触摸注入：无障碍已就绪（能点输入法键盘）"
                 : ("· 触摸注入：无障碍没开 —— " + accessibilityState()));
-        if (!TouchBridgeService.ready()) Toast.makeText(this, "提示：输入法键盘点不动时，用右下角「⌨ 打字」本机打字（不需要无障碍）", Toast.LENGTH_LONG).show();
+
         line("目标车: VOGE DS625X　modelid " + Proto.DASH_MODEL_ID + "　sn " + Proto.DASH_SN);
         line("流程：先在系统 Wi-Fi 里连上仪表（Wi-Fi Direct 组网或仪表热点）→ 扫描 → 探针 → 监听");
-        line(TouchBridgeService.ready()
-                ? "✓ 系统级触摸注入已开启（键盘也能点）"
-                : "提示：要让投屏里的输入法键盘点得动，去「设置 → 无障碍 → 极享」把开关打开（不开只能点 CarWith 自己窗口里的内容）");
+
 
         roundTick = new Runnable() {
             @Override public void run() {
@@ -395,7 +393,7 @@ public class MainActivity extends Activity implements Net.Log {
         chipLp.gravity = Gravity.END | Gravity.BOTTOM;
         chipLp.rightMargin = dp(8);
         chipLp.bottomMargin = dp(8);
-        pvWrap.addView(pvInputChip, chipLp);
+        // 8.28：胶囊已删除，不再挂到预览层
 
         TextView pvToneChip = new TextView(this);
         pvToneChip.setText("♪试听");
@@ -418,7 +416,7 @@ public class MainActivity extends Activity implements Net.Log {
         toneLp.gravity = Gravity.END | Gravity.BOTTOM;
         toneLp.rightMargin = dp(160);
         toneLp.bottomMargin = dp(8);
-        pvWrap.addView(pvToneChip, toneLp);
+        // 8.28：胶囊已删除，不再挂到预览层
         pvToneChipRef = pvToneChip;
 
         // 输出档位：自动 / 本机扬声器 / 蓝牙 —— 蓝牙耳机到底有没有出声，用这个当场切
@@ -452,7 +450,7 @@ public class MainActivity extends Activity implements Net.Log {
         outLp.gravity = Gravity.END | Gravity.BOTTOM;
         outLp.rightMargin = dp(224);
         outLp.bottomMargin = dp(8);
-        pvWrap.addView(pvOutChip, outLp);
+        // 8.28：胶囊已删除，不再挂到预览层
 
         pvSpaceChip = new TextView(this);
         pvSpaceChip.setText("坐标:" + SPACE_NAMES[touchSpace]);
@@ -474,7 +472,7 @@ public class MainActivity extends Activity implements Net.Log {
         spaceLp.gravity = Gravity.END | Gravity.BOTTOM;
         spaceLp.rightMargin = dp(288);
         spaceLp.bottomMargin = dp(8);
-        pvWrap.addView(pvSpaceChip, spaceLp);
+        // 8.28：胶囊已删除，不再挂到预览层
 
         pvTapChip = new TextView(this);
         pvTapChip.setText("触摸:正常");
@@ -492,7 +490,7 @@ public class MainActivity extends Activity implements Net.Log {
         tapLp.gravity = Gravity.END | Gravity.BOTTOM;
         tapLp.rightMargin = dp(96);
         tapLp.bottomMargin = dp(8);
-        pvWrap.addView(pvTapChip, tapLp);
+        // 8.28：胶囊已删除，不再挂到预览层
 
         pvModeBadge = new TextView(this);
         pvModeBadge.setText("· 只发按下 ·");
@@ -666,7 +664,8 @@ public class MainActivity extends Activity implements Net.Log {
             ((ViewGroup) pvOutChip.getParent()).removeView(pvOutChip);
         if (pvSpaceChip != null && pvSpaceChip.getParent() != null)
             ((ViewGroup) pvSpaceChip.getParent()).removeView(pvSpaceChip);
-        TextView[] chips = { pvInputChip, pvTapChip, pvToneChipRef, pvOutChip, pvSpaceChip };
+        // 8.28：打字 / 试听 / 输出 / 坐标 / 触摸 五个胶囊全部删除，底部胶囊条不再放它们
+        TextView[] chips = { };
         for (TextView c : chips) {
             if (c == null) continue;
             LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(0, dp(34), 1f);
