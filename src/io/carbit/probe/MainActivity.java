@@ -124,7 +124,9 @@ public class MainActivity extends Activity implements Net.Log {
                 if (it == null) return;
                 String a = it.getAction();
                 if (Intent.ACTION_SCREEN_OFF.equals(a)) {
-                    // 锁屏后没人看手机了，预览解码器没必要留着占 CPU/电
+                    // 灭屏 = CarWith 的 MediaProjection 被系统停掉，10920/10921 必然断，我们拦不住，
+                    // 只能保证解锁后自动把整段会话重建回来（下面 SCREEN_ON/USER_PRESENT 分支）。
+                    line("· 灭屏：CarWith 的录屏会被系统停止，投屏会断；解锁后会自动重连（投屏期间别按电源键锁屏）");
                     if (previewOn) { try { stopPreviewNow("锁屏了，预览已自动关闭（省电省 CPU）"); } catch (Throwable ignored) { } }
                     return;
                 }
@@ -425,6 +427,17 @@ public class MainActivity extends Activity implements Net.Log {
         pvOutChip.setTextColor(0xFFCFE7FF);
         pvOutChip.setPadding(dp(9), dp(5), dp(9), dp(5));
         pvOutChip.setBackground(roundBg(0xCC16212E, 12, 0xFF3A4E63));
+        // 长按「输出」= 切音频模式：本机播(1) / 走通道(0)。导航没声时可用来对比。
+        pvOutChip.setOnLongClickListener(new View.OnLongClickListener() {
+            @Override public boolean onLongClick(View v) {
+                FakeHu.AUDIO_MODE = FakeHu.AUDIO_MODE == 1 ? 0 : 1;
+                line("· 音频模式切成 " + FakeHu.AUDIO_MODE + "（"
+                        + (FakeHu.AUDIO_MODE == 1 ? "本机播：音乐/导航都由手机出，无延迟" : "走通道：PCM 由本机 AudioTrack 放") + "），重开投屏生效");
+                Toast.makeText(MainActivity.this, "音频模式 " + FakeHu.AUDIO_MODE + "，请重开投屏", Toast.LENGTH_SHORT).show();
+                try { if (fakeHu != null) fakeHu.resendFeatureConfig(); } catch (Throwable ignored) { }
+                return true;
+            }
+        });
         pvOutChip.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
                 String n = MediaAudio.cyclePref();
@@ -1330,6 +1343,12 @@ public class MainActivity extends Activity implements Net.Log {
         line("");
         line("=== 开始投屏（假车机取流 → 投给仪表） ===");
         wasStreaming = true;
+        // 8.23：投屏期间禁止自动息屏/自动锁屏。灭屏会让 CarWith 的 MediaProjection 被系统停掉，
+        // 后面的 10920/10921 全断，靠解锁重连只是补救，不如一开始就别让它灭。
+        try {
+            getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            line("· 已开「投屏期间禁止息屏」（手动按电源键锁屏仍会断，那是主动行为）");
+        } catch (Throwable t) { line("· 常亮标志没挂上：" + t); }
         // 尊重你最后一次的手动选择：上次开预览就继续开，上次关着就保持关（不再无脑关掉）
         if (previewPref) {
             H264Preview pv = ensurePreview();
@@ -1346,6 +1365,7 @@ public class MainActivity extends Activity implements Net.Log {
 
     private void doStopAll() {
         wasStreaming = false;
+        try { getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); } catch (Throwable ignored) { }
         line("");
         line("=== 全部停止 ===");
         if (fakeHu != null) { try { fakeHu.stop(); } catch (Throwable ignored) { } fakeHu = null; }

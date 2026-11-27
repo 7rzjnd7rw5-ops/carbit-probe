@@ -70,7 +70,9 @@ public final class Rig {
     private static volatile byte[] rvCarFrame;
     private static volatile long rvCarMs;
     /** 待推队列：道具仪表是按 0x0072 一帧一帧拉的，拉得比 CarWith 慢，所以要按 GOP 边界丢整段，不能中间抽帧 */
-    private static final ArrayBlockingQueue<byte[]> rvQ = new ArrayBlockingQueue<byte[]>(60);
+    private static final ArrayBlockingQueue<byte[]> rvQ = new ArrayBlockingQueue<byte[]>(20);
+    /** 队列峰值：仪表拉得比 CarWith 出得慢时，这个数就是"凭空多出来的延迟帧数" */
+    private static volatile int rvQPeak = 0;
     /** 最近一个完整关键帧：仪表拉取时队列恰好空掉，就把这个 IDR 再发一次，避免"什么都不发→仪表停在 logo" */
     private static volatile byte[] rvLastKey;
     /** 预编好的黑场关键帧：仪表一问就回它，保证 10920 会话不被判超时 */
@@ -197,10 +199,12 @@ public final class Rig {
             rvGaps = 0;
             rvQ.clear();
             rvQ.offer(p);
+            rvQPeak = Math.max(rvQPeak, rvQ.size());
             Net.Log lg = slog;
             if (lg != null) lg.line("   → 已对齐到新的关键帧，重新开始连续推流");
             return;
         }
+        rvQPeak = Math.max(rvQPeak, rvQ.size());
         if (!rvQ.offer(p)) {
             rvDropped += rvQ.size();
             rvQ.clear();
@@ -345,7 +349,7 @@ public final class Rig {
             if (rvSent == 1 || rvSent % 200 == 0) {
                 log.line("   [10920] 已推 " + rvSent + " 帧（" + (resend ? "重发关键帧" : "原帧 " + rvCarUsed) + " / 本次 " + payload.length
                         + "B / " + (key ? "关键帧" : "P帧") + " / 帧龄 " + age + "ms / 队列 " + rvQ.size()
-                        + " / 累计丢 " + rvDropped + " / 关键帧数 " + rvKey + "）");
+                        + " / 累计丢 " + rvDropped + " / 关键帧数 " + rvKey + " / 队列峰值 " + rvQPeak + "）");
             }
             return;
         }

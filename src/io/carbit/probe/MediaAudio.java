@@ -27,6 +27,10 @@ public class MediaAudio {
     private static MediaAudio.Sink sink;
     private static android.media.AudioDeviceCallback deviceCb;
     private static int boundDevId = -1;
+    /** 诊断用：写入峰值 / 被丢弃的包数（非阻塞写没写进去的） */
+    private static volatile int peak = 0;
+    private static volatile int dropPkts = 0;
+    private static volatile int dropped = 0;
 
     /** 0 自动、1 本机扬声器、2 蓝牙耳机 */
     private static int routePref = 0;
@@ -70,7 +74,11 @@ public class MediaAudio {
         int chMask = channels == 1 ? AudioFormat.CHANNEL_OUT_MONO : AudioFormat.CHANNEL_OUT_STEREO;
         int enc = bits == 8 ? AudioFormat.ENCODING_PCM_8BIT : AudioFormat.ENCODING_PCM_16BIT;
         int minBuf = AudioTrack.getMinBufferSize(rate, chMask, enc);
-        int buf = Math.max(minBuf * 4, rate * 4);
+        // 原来 buf = max(minBuf*4, rate*4)：44.1k/立体声/16bit 下 rate*4 正好等于 1 秒的数据量，
+        // 等于给蓝牙又加了一秒缓冲，延迟主要来自这里。改成「约 150ms 或 2 倍最小缓冲」，
+        // 宁可偶发欠载也不要堆延迟（欠载由上层丢旧帧兜底）。
+        int framePerMs = Math.max(1, rate * (bits == 8 ? 1 : 2) * channels / 1000);
+        int buf = Math.max(minBuf * 2, framePerMs * 150);
         AudioTrack t = new AudioTrack.Builder()
                 .setAudioAttributes(new AudioAttributes.Builder()
                         .setUsage(AudioAttributes.USAGE_MEDIA)
@@ -219,6 +227,24 @@ public class MediaAudio {
         } catch (Throwable e) { return "查不到(" + e + ")"; }
     }
 
+    /** 取一段 PCM 的峰值绝对值，给"导航到底有没有声音"做证据。 */
+    private static int absPeak(byte[] pcm) {
+        int m = 0;
+        for (int i = 0; i + 1 < pcm.length; i += 2) {
+            short v = (short) ((pcm[i] & 0xff) | (pcm[i + 1] << 8));
+            int a = v < 0 ? -v : v;
+            if (a > m) m = a;
+        }
+        return m;
+    }
+
+    /** 20 秒汇总用：返回「峰值 / 丢包数」，并把统计清零。 */
+    public static synchronized String peakAndReset() {
+        String r = peak + "/" + dropPkts + (dropped > 0 ? "/异常" + dropped : "");
+        peak = 0; dropPkts = 0; dropped = 0;
+        return r;
+    }
+
     /** 热路径：不加锁、不算设备，纯写。 */
     public static void writePcm(byte[] pcm) {
         AudioTrack t = track;
@@ -226,7 +252,14 @@ public class MediaAudio {
             if (t == null) ensure(44100, 2, 16);
             return;
         }
-        try { t.write(pcm, 0, pcm.length); } catch (Throwable ignored) { }
+        try {
+            // 非阻塞写：底层缓冲满了就把这一包丢掉，绝不排队 —— 排队=延迟累积。
+            int r = t.write(pcm, 0, pcm.length, AudioTrack.WRITE_NON_BLOCKING);
+            peak = Math.max(peak, absPeak(pcm));
+            if (r < pcm.length) dropPkts++;
+        } catch (Throwable e) {
+            try { dropped++; } catch (Throwable ignored) { }
+        }
     }
 
     public static synchronized void release() {

@@ -45,6 +45,8 @@ public class FakeHu {
      * 之前要 30fps，必然丢帧 → P 帧引用断链 → 仪表花屏。这里直接对齐拉取速度，从源头不丢帧。
      */
     public static volatile int VIDEO_FPS = 10;
+    /** 是否把 CarWith 的原始 H264 落盘（排查用，日常必须关，见 videoRead 里的说明） */
+    public static final boolean DUMP_H264 = false;
     private static final int VIDEO_ENCODER_INIT = 98311;
     private static final int VIDEO_ENCODER_START = 98313;
     private static final int VIDEO_ENCODER_INIT_DONE = 65544;
@@ -67,7 +69,16 @@ public class FakeHu {
     private Socket cmd, video, touch, media;
     private long mediaBytes;
     /** 音频模式：0=PCM 走 Media 通道（我们用 AudioTrack 在本机放）；1=CarLife 自己留本机。 */
-    public static volatile int AUDIO_MODE = 0;
+    /**
+     * 0=通道模式（PCM 走 Media 通道，手机自己静音）
+     * 1=本地/蓝牙模式（CarLife 不发通道包，音乐+导航 TTS+VR 全部在手机本机播）
+     *
+     * 8.24 默认改成 1。原因：通道模式下车机端只能拿到 USAGE_MEDIA 的采集，
+     * 导航播报走 USAGE_ASSISTANCE_NAVIGATION_GUIDANCE，播放采集 API 不允许采，
+     * 于是导航声音被 CarWith 静音掉、又不会进通道 —— 哪边都听不到。
+     * 走 1 之后导航由手机自己播到蓝牙耳机，延迟也彻底没有了（不经采集/编码）。
+     */
+    public static volatile int AUDIO_MODE = 1;
     private boolean audioInitDone;
     private boolean previewPausedLogged;
     private int audioPackets;
@@ -423,6 +434,7 @@ public class FakeHu {
                 if (System.currentTimeMillis() - lastMediaLog > 20000) {
                     log("… Media 通道 20 秒汇总：包 " + n + " 个 / " + mediaBytes
                             + " 字节，本机 AudioTrack 播放包 " + audioPackets
+                            + "，音频峰值/丢弃包=" + MediaAudio.peakAndReset()
                             + (n == 0 ? "（0 包属正常：AUDIO_MODE=" + AUDIO_MODE + "，PCM 不经这条通道）" : ""));
                     lastMediaLog = System.currentTimeMillis();
                 }
@@ -481,6 +493,9 @@ public class FakeHu {
             if (hLen == pl.length - 12 || hType == type) off = 12;
         }
         if (pl.length <= off) return;
+        if (AUDIO_MODE == 1 && audioPackets < 1) {
+            log("· 注意：AUDIO_MODE=1 仍在收通道包 —— 手机端没按配置走，我们照播（双保险）");
+        }
         if (audioPackets < 5) {
             double rms = 0; int cnt = 0;
             for (int i = off + 1; i + 1 < pl.length; i += 2) { int v = pl[i]; rms += v * v; cnt++; }
@@ -501,7 +516,11 @@ public class FakeHu {
         try {
             InputStream in = new BufferedInputStream(video.getInputStream(), 65536);
             byte[] head = new byte[12];
-            try { dumpFile = new File(ctx.getExternalFilesDir(null), "fakehu.h264"); dumpOut = new FileOutputStream(dumpFile); } catch (Throwable t) { }
+            // 8.25：默认不再把每一帧写进手机存储。30fps × 35KB ≈ 1MB/s 的持续 IO 会拖住这条读线程，
+            // 造成推给仪表的帧忽快忽慢（体感就是延迟和卡顿）。要抓流排查时把 DUMP_H264 改成 true。
+            if (DUMP_H264) {
+                try { dumpFile = new File(ctx.getExternalFilesDir(null), "fakehu.h264"); dumpOut = new FileOutputStream(dumpFile); } catch (Throwable t) { }
+            }
             while (running) {
                 if (!readFully(in, head, 12)) break;
                 int len = ((head[0] & 0xff) << 24) | ((head[1] & 0xff) << 16)
