@@ -322,6 +322,22 @@ public class MainActivity extends Activity implements Net.Log {
         heroTop.addView(heroPill, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
+        // ── WiFi 体检胶囊：摆在「空闲」右边，WiFi 关着就不让扫/不让投，点它弹出系统 WiFi 面板 ──
+        wifiChip = new TextView(this);
+        wifiChip.setText("WiFi …");
+        wifiChip.setTextSize(11);
+        wifiChip.setTypeface(Typeface.DEFAULT_BOLD);
+        wifiChip.setPadding(dp(9), dp(5), dp(9), dp(5));
+        wifiChip.setBackground(roundBg(0x1A57C88A, 11, 0));
+        wifiChip.setTextColor(0xFF57C88A);
+        wifiChip.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { onWifiChipClick(); }
+        });
+        LinearLayout.LayoutParams wcLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        wcLp.leftMargin = dp(6);
+        heroTop.addView(wifiChip, wcLp);
+
         hero.addView(heroTop);
 
         // 主按钮：CarWithin 那种 filled 大按钮，只是换成蓝色渐变（深色主题下不刺眼）
@@ -850,6 +866,7 @@ public class MainActivity extends Activity implements Net.Log {
 
     /** 每秒刷新“本轮体检”一行：告诉用户什么时候可以点下一个变体。 */
     private void updateRound() {
+        updateWifiChip();
         if (readyView == null) return;
         long start = Rig.roundStartAt;
         if (start == 0) {
@@ -1099,6 +1116,7 @@ public class MainActivity extends Activity implements Net.Log {
     }
 
     private void doOneClick() {
+        if (!requireWifi("一键探测")) return;
         if (pipelineStage != 0) {
             line("一键探测已经在跑，别重复点");
             return;
@@ -1334,6 +1352,7 @@ public class MainActivity extends Activity implements Net.Log {
 
     /** 一键上车：先起假车机取流，2.5 秒后再把端口和推流开起来。 */
     private void doStartAll() {
+        if (!requireWifi("开始投屏")) return;
         bootAutoDone = true;   // 一旦开始（手动或自检命中），启动轮询就收手
         // 联动：还没和仪表组网，就先直连，连上后自动接着开流（一个动作走到底）
         if (!p2pReady && foundHost == null) {
@@ -1432,10 +1451,16 @@ public class MainActivity extends Activity implements Net.Log {
     private TextView heroBtn, heroPill;
     /** P2P 组网是否已完成：直连成功后为 true，开始投屏时据此决定要不要先组网。 */
     private volatile boolean p2pReady = false;
+    /** 顶部 WiFi 体检胶囊：WiFi 关着就拦下扫描/投屏。 */
+    private TextView wifiChip;
+    private volatile boolean wifiPanelShown;   // WiFi 关着期间只自动弹一次面板，别反复打断 */
+    private int wifiOffTicks;
+
 
     private void doDirect() { doDirect(false); }
 
     private void doDirect(final boolean thenStart) {
+        if (!requireWifi("直连仪表")) return;
         if (directBusy) {
             if (thenStart) directThenStart = true;
             line("直连正在进行，等这一轮结束" + (thenStart ? "就自动开投屏" : "再点"));
@@ -1510,8 +1535,76 @@ public class MainActivity extends Activity implements Net.Log {
     private int bootPollTick;
     private volatile boolean bootAutoDone;
 
+    private boolean isWifiOn() {
+        try {
+            android.net.wifi.WifiManager wm = (android.net.wifi.WifiManager)
+                    getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+            return wm != null && wm.isWifiEnabled();
+        } catch (Throwable t) { return true; }   // 读不到就别拦着用户
+    }
+
+    private void updateWifiChip() {
+        if (wifiChip == null) return;
+        // 每秒都会刷：状态没变就别重建背景，省得一直产生垃圾
+        boolean on = isWifiOn();
+        String want = on ? "WiFi 已开" : "WiFi 关 · 点开";
+        if (want.contentEquals(wifiChip.getText())) return;
+        if (on) {
+            wifiChip.setText("WiFi 已开");
+            wifiChip.setTextColor(0xFF57C88A);
+            wifiChip.setBackground(roundBg(0x1A57C88A, 11, 0));
+        } else {
+            wifiChip.setText("WiFi 关 · 点开");
+            wifiChip.setTextColor(0xFFFF7A7A);
+            wifiChip.setBackground(roundBg(0x1AFF6B6B, 11, 0));
+        }
+    }
+
+    private void onWifiChipClick() {
+        if (isWifiOn()) { line("· WiFi 已开，可以直接扫仪表了"); return; }
+        openWifiPanel();
+    }
+
+    /** 拉起系统 WiFi 开关面板。Android 10+ 普通 App 无权直接改 WiFi 开关（CHANGE_WIFI_STATE 对 setWifiEnabled 已失效），
+     *  只能把人送到那个开关前，点一下系统自己就开。 */
+    private void openWifiPanel() {
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= 29) {
+                Intent wifiPanel = new Intent(android.provider.Settings.Panel.ACTION_WIFI);
+                wifiPanel.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(wifiPanel);
+                line("· 已拉起系统 WiFi 面板：把开关拨开，回来就能扫（App 自己改不了 WiFi 状态）");
+                return;
+            }
+        } catch (Throwable t) { line("· 面板打不开（" + t + "），改开设置页"); }
+        try {
+            Intent wifiSet = new Intent(android.provider.Settings.ACTION_WIFI_SETTINGS);
+            wifiSet.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(wifiSet);
+            line("· 已打开系统 WiFi 设置页，开开关再回来");
+        } catch (Throwable t) { line("· 打不开 WiFi 设置：" + t); }
+    }
+
+    /** 所有"要联网才能干活"的入口先过这一关：WiFi 关着就不往下走。 */
+    private boolean requireWifi(String what) {
+        if (isWifiOn()) { wifiPanelShown = false; updateWifiChip(); return true; }
+        line("· WiFi 没开 → " + what + "先不做，开 WiFi 再来");
+        setRun("✗ WiFi 没开，先开 WiFi", C_BAD);
+        updateWifiChip();
+        if (!wifiPanelShown) { wifiPanelShown = true; openWifiPanel(); }
+        return false;
+    }
+
     private void bootPoll() {
         if (bootAutoDone || wasStreaming) return;
+        updateWifiChip();
+        if (!isWifiOn()) {
+            // WiFi 关着就别扫了：每 3 秒再看一眼，开了立刻接上。这期间不消耗 90 秒预算，也不自动弹面板
+            if (++wifiOffTicks % 10 == 1) line("· 启动自检暂停：WiFi 没开（点顶部红色胶囊可拉起开关）");
+            ui.postDelayed(new Runnable() { @Override public void run() { bootPoll(); } }, 3000);
+            return;
+        }
+        wifiOffTicks = 0;
         if (bootPollTick++ >= 30) {
             line("· 启动自检：90 秒没查到仪表组网，先不自动扫（点「开始投屏」手动直连）");
             return;
@@ -2109,6 +2202,7 @@ public class MainActivity extends Activity implements Net.Log {
     }
 
     private void scanQr() {
+        if (!requireWifi("扫码")) return;
         startActivityForResult(new android.content.Intent(this, ScanActivity.class), 11);
     }
 
