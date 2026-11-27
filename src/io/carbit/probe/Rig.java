@@ -69,8 +69,9 @@ public final class Rig {
     private static volatile CarDecoder carDec;   // 保留字段占位，已不使用
     private static volatile byte[] rvCarFrame;
     private static volatile long rvCarMs;
-    /** 待推队列：道具仪表是按 0x0072 一帧一帧拉的，拉得比 CarWith 慢，所以要按 GOP 边界丢整段，不能中间抽帧 */
-    private static final ArrayBlockingQueue<byte[]> rvQ = new ArrayBlockingQueue<byte[]>(20);
+    /** 待推队列：仪表按 0x0072 一帧一帧拉。8.33 起容量 90（约 3 秒），够吃掉仪表几百毫秒的停顿；
+     *  20 帧只有 0.67 秒，18:11 那次就是被 715ms 的停拉顶爆，然后一路恶性循环。 */
+    private static final ArrayBlockingQueue<byte[]> rvQ = new ArrayBlockingQueue<byte[]>(90);
     /** 队列峰值：仪表拉得比 CarWith 出得慢时，这个数就是"凭空多出来的延迟帧数" */
     private static volatile int rvQPeak = 0;
     /** 最近一个完整关键帧：仪表拉取时队列恰好空掉，就把这个 IDR 再发一次，避免"什么都不发→仪表停在 logo" */
@@ -83,7 +84,7 @@ public final class Rig {
     private static volatile long rvLastReplyMs;
     private static volatile long rvPulls;
     private static long rvRateAt;
-    private static int rvDropped, rvKey, rvGaps;          // 丢弃帧数 / 关键帧数 / 断流重同步次数
+    private static int rvDropped, rvKey, rvGaps, rvKeyDropped;   // 丢弃帧数 / 关键帧数 / 断流重同步次数 / 被丢掉的关键帧数
     private static long rvLastKeyMs, rvLastSize, rvStaticRun;
     private static volatile byte[] rvSpsPps;
     private static int rvCarCount, rvCarUsed;
@@ -206,16 +207,18 @@ public final class Rig {
         }
         rvQPeak = Math.max(rvQPeak, rvQ.size());
         if (!rvQ.offer(p)) {
-            rvDropped += rvQ.size();
-            rvQ.clear();
-            if (key) {
-                rvQ.offer(p);
+            // 8.33：满队列不再"整段清空 + 等下一个 IDR"。CarWith 基本只在开局发一次 IDR，
+            // 一清空就永久没东西可推 → 仪表等不到帧就判超时、反复重连（18:11–18:13 那 39 次会话就是这来的）。
+            // 改成滑动窗口：丢最旧的一帧，保住最近这一串连续帧，让仪表一直有帧可拉。
+            byte[] oldest = rvQ.poll();
+            if (oldest != null) {
+                rvDropped++;
+                if (isKeyFrame(oldest)) rvKeyDropped++;
+            }
+            if (!rvQ.offer(p)) rvDropped++;
+            if (rvDropped == 1 || rvDropped % 300 == 0) {
                 Net.Log lg = slog;
-                if (lg != null) lg.line("   × 推得跟不上，已整段丢弃并停在关键帧（累计丢 " + rvDropped + " 帧）");
-            } else {
-                rvGaps++;
-                Net.Log lg = slog;
-                if (lg != null) lg.line("   × 推得跟不上：丢掉当前 GOP 等下一个关键帧（累计丢 " + rvDropped + " 帧）");
+                if (lg != null) lg.line("   × 推得跟不上：按最旧帧滑出（累计丢 " + rvDropped + " 帧，其中关键帧 " + rvKeyDropped + "），仪表仍能持续拉到帧");
             }
         }
         // 等关键帧超时检测：CarWith 可能只在开局发一次 IDR，之后全是 P 帧

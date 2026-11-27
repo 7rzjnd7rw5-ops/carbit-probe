@@ -81,7 +81,6 @@ public class MainActivity extends Activity implements Net.Log {
         appCtx = getApplicationContext();
         // 每次启动都从 0（PCM 走通道、本机 AudioTrack 出声）开始，不记忆上次的切换，
         // 免得上一轮按成了 1（CarLife 静默）把后面每次上车都带成哑的。
-        FakeHu.AUDIO_MODE = 0;
         if (!hadCleanExit()) {
             line("");
             line("⚠ 上次没有正常退出记录（可能被系统直接带走，也可能只是被手动划掉，没有 Java 栈）");
