@@ -124,16 +124,17 @@ public final class Proto {
 
     // ---- 从仪表屏二维码解出的实车信息（VOGE DS625X，UUID CARBIT-EXAMPLE-UUID）----
 
+    // 8.31：这几个不再是常量 —— 扫仪表屏二维码时按码里的值覆盖并落盘，扫不到才用这里的默认值。
     /** 仪表自建热点 SSID。 */
-    public static final String DASH_SSID = "VOGE-XXXX";
+    public static volatile String DASH_SSID = "VOGE-XXXX";
     /** 该热点密码（WPA-PSK）。 */
-    public static final String DASH_PWD = "00000000";
+    public static volatile String DASH_PWD = "00000000";
     /** 二维码里的 modelid，Carbit 用它区分仪表型号。 */
-    public static final String DASH_MODEL_ID = "45103";
+    public static volatile String DASH_MODEL_ID = "45103";
     /** 二维码里的 sn。 */
-    public static final String DASH_SN = "EXAMPLE-SN";
+    public static volatile String DASH_SN = "EXAMPLE-SN";
     /** 仪表屏显示的 UUID。 */
-    public static final String DASH_UUID = "CARBIT-EXAMPLE-UUID";
+    public static volatile String DASH_UUID = "CARBIT-EXAMPLE-UUID";
 
     private Proto() {
     }

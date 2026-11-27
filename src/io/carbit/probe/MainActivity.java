@@ -94,6 +94,7 @@ public class MainActivity extends Activity implements Net.Log {
         startCrashWatch();
         pickUpWatchdog();
         setContentView(buildUi());
+        loadDashPrefs();   // 上次扫码记下的仪表身份（ssid/pwd/modelid/sn/uuid），没有就用默认值
         refreshNetworkInfo();
         try {
             vn = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
@@ -2239,10 +2240,17 @@ public class MainActivity extends Activity implements Net.Log {
         P2p.wantName = qrName;
         P2p.wantMac = qrMac;
         if (qrName != null || qrMac != null) line("码里的 P2P 目标：name=" + qrName + " mac=" + qrMac);
-        infoView.setText(dashInfoText(ssid, pwd,
-                modelId == null ? "?" : modelId,
-                sn == null ? "?" : sn,
-                uuid == null ? "（屏上显示）" : uuid));
+        // 8.31：不再只显示 —— 扫码值直接接管成当前仪表身份并落盘，下次开 App 自动带上
+        Proto.DASH_SSID = ssid;
+        Proto.DASH_PWD = pwd;
+        if (modelId != null && modelId.length() > 0) Proto.DASH_MODEL_ID = modelId;
+        if (sn != null && sn.length() > 0) Proto.DASH_SN = sn;
+        if (uuid != null && uuid.length() > 0) Proto.DASH_UUID = uuid;
+        saveDashPrefs();
+        line("· 已接管仪表身份：modelid=" + Proto.DASH_MODEL_ID + "  sn=" + Proto.DASH_SN
+                + "  uuid=" + Proto.DASH_UUID + "（已存盘，下次开 App 不用再扫）");
+        infoView.setText(dashInfoText(Proto.DASH_SSID, Proto.DASH_PWD,
+                Proto.DASH_MODEL_ID, Proto.DASH_SN, Proto.DASH_UUID));
         line("ssid=" + ssid + "  pwd=" + pwd + "  modelid=" + modelId + "  sn=" + sn);
         try {
             android.content.ClipboardManager cm = (android.content.ClipboardManager)
@@ -2253,6 +2261,31 @@ public class MainActivity extends Activity implements Net.Log {
         }
         line("扫码完成 → 自动接着走 Wi‑Fi Direct 直连，组网成功即开投屏");
         ui.postDelayed(new Runnable() { @Override public void run() { doDirect(true); } }, 500);
+    }
+
+    private static final String PREF_DASH = "dash_identity";
+
+    private void loadDashPrefs() {
+        try {
+            android.content.SharedPreferences p = getSharedPreferences(PREF_DASH, MODE_PRIVATE);
+            Proto.DASH_SSID = p.getString("ssid", Proto.DASH_SSID);
+            Proto.DASH_PWD = p.getString("pwd", Proto.DASH_PWD);
+            Proto.DASH_MODEL_ID = p.getString("modelid", Proto.DASH_MODEL_ID);
+            Proto.DASH_SN = p.getString("sn", Proto.DASH_SN);
+            Proto.DASH_UUID = p.getString("uuid", Proto.DASH_UUID);
+        } catch (Throwable ignored) { }
+    }
+
+    private void saveDashPrefs() {
+        try {
+            getSharedPreferences(PREF_DASH, MODE_PRIVATE).edit()
+                    .putString("ssid", Proto.DASH_SSID)
+                    .putString("pwd", Proto.DASH_PWD)
+                    .putString("modelid", Proto.DASH_MODEL_ID)
+                    .putString("sn", Proto.DASH_SN)
+                    .putString("uuid", Proto.DASH_UUID)
+                    .apply();
+        } catch (Throwable ignored) { }
     }
 
     private void clearLog() {
@@ -2588,7 +2621,7 @@ public class MainActivity extends Activity implements Net.Log {
                     ok = doUpload(lan, name, data, cfg[2]);
                 }
                 if (!ok) {
-                    line("两条地址都没推上去：确认 Wi‑Fi、地址、token（连着仪表热点 VOGE-3764 时外网和内网都不通）");
+                    line("两条地址都没推上去：确认 Wi‑Fi、地址、token（连着仪表热点 VOGE-XXXX 时外网和内网都不通）");
                     line("日志已在本地留了一份：下载/CarbitProbe/" + name);
                     setRun("上传失败 · 已存本地 " + name, C_BAD);
                 } else {
@@ -3180,7 +3213,7 @@ public class MainActivity extends Activity implements Net.Log {
         final String host = target();
         line("");
         line("=== 投给仪表 " + host + " ===");
-        line("前提：手机已连上仪表的热点(VOGE-3764)或 Wi-Fi Direct 组网");
+        line("前提：手机已连上仪表的热点(VOGE-XXXX)或 Wi-Fi Direct 组网");
         setRun("● 已开端口，等仪表连入(0台)", C_RUN);
         final Rig r = new Rig();
         r.bindLog(MainActivity.this);
