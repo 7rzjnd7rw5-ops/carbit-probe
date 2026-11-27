@@ -696,14 +696,13 @@ public class MainActivity extends Activity implements Net.Log {
         // ── 底部操作区：两排六列，按使用频次从高到低排，整屏不用滑 ──
         // 两排按钮。常用两个（开始/停止）给更大权重和字号；最下一排整体抬高，
         // 让整套按钮离屏幕底边约 2cm，手机支架上的手指够得到。
-        int[] r1Ico = {IconBtn.PREVIEW, IconBtn.LINK, IconBtn.SCAN, IconBtn.RADAR};
-        String[] r1Txt = {"预览", "直连投屏", "扫描", "探测"};
-        float[] r1W = {1f, 1.15f, 0.95f, 0.95f};
+        // 8.29：删掉「直连投屏」和「探测」——直连已经并进「开始投屏」的自动链，探测是早期摸底用的老路径
+        int[] r1Ico = {IconBtn.PREVIEW, IconBtn.SCAN};
+        String[] r1Txt = {"预览", "扫描"};
+        float[] r1W = {1f, 1f};
         View.OnClickListener[] r1Act = {
                 new View.OnClickListener() { @Override public void onClick(View v) { togglePreview(); } },
-                new View.OnClickListener() { @Override public void onClick(View v) { doDirect(); } },
-                new View.OnClickListener() { @Override public void onClick(View v) { scanQr(); } },
-                new View.OnClickListener() { @Override public void onClick(View v) { doOneClick(); } }
+                new View.OnClickListener() { @Override public void onClick(View v) { scanQr(); } }
         };
         int[] r2Ico = {IconBtn.UPLOAD, IconBtn.FILE, IconBtn.LOOP, IconBtn.GEAR};
         String[] r2Txt = {"推日志", "导出", "更新", "NAS"};
@@ -719,7 +718,7 @@ public class MainActivity extends Activity implements Net.Log {
         for (int c = 0; c < r1Ico.length; c++) {
             IconBtn b = new IconBtn(this, r1Ico[c], r1Txt[c], 22, 9f);
             if (c == 0) { previewBtn = b; b.setActive(previewOn); }
-            if (c == 1) directBtn = b;
+
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(56), r1W[c]);
             if (c > 0) lp.leftMargin = dp(5);
             row1.addView(b, lp);
