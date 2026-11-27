@@ -301,11 +301,15 @@ public class MainActivity extends Activity implements Net.Log {
         heroTitleCol.setOrientation(LinearLayout.VERTICAL);
         TextView heroTitle = new TextView(this);
         heroTitle.setText("极享");
+        heroTitle.setSingleLine(true);
+        heroTitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
         heroTitle.setTextColor(0xFFF2F6FA);
         heroTitle.setTextSize(20);
         heroTitle.setTypeface(Typeface.DEFAULT_BOLD);
         TextView heroSub = new TextView(this);
         heroSub.setText("车机投屏 · 手机画面 → 摩托仪表");
+        heroSub.setSingleLine(true);
+        heroSub.setEllipsize(android.text.TextUtils.TruncateAt.END);
         heroSub.setTextColor(0xFF8C97A6);
         heroSub.setTextSize(11);
         heroTitleCol.addView(heroTitle);
@@ -320,15 +324,19 @@ public class MainActivity extends Activity implements Net.Log {
         heroPill.setTypeface(Typeface.DEFAULT_BOLD);
         heroPill.setPadding(dp(9), dp(5), dp(9), dp(5));
         heroPill.setBackground(roundBg(0x264C8DFF, 11, 0));
-        heroTop.addView(heroPill, new LinearLayout.LayoutParams(
+        // ── 状态胶囊竖着排成一列放在标题右边：8.32 之前并排会把标题挤成一字一行 ──
+        LinearLayout pillCol = new LinearLayout(this);
+        pillCol.setOrientation(LinearLayout.VERTICAL);
+        pillCol.setGravity(Gravity.END);
+        pillCol.addView(heroPill, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        // ── WiFi 体检胶囊：摆在「空闲」右边，WiFi 关着就不让扫/不让投，点它弹出系统 WiFi 面板 ──
+        // ── WiFi 体检胶囊：WiFi 关着就不让扫/不让投，点它弹出系统 WiFi 面板 ──
         wifiChip = new TextView(this);
         wifiChip.setText("WiFi …");
-        wifiChip.setTextSize(11);
+        wifiChip.setTextSize(10);
         wifiChip.setTypeface(Typeface.DEFAULT_BOLD);
-        wifiChip.setPadding(dp(9), dp(5), dp(9), dp(5));
+        wifiChip.setPadding(dp(7), dp(3), dp(7), dp(3));
         wifiChip.setBackground(roundBg(0x1A57C88A, 11, 0));
         wifiChip.setTextColor(0xFF57C88A);
         wifiChip.setOnClickListener(new View.OnClickListener() {
@@ -336,8 +344,13 @@ public class MainActivity extends Activity implements Net.Log {
         });
         LinearLayout.LayoutParams wcLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        wcLp.leftMargin = dp(6);
-        heroTop.addView(wifiChip, wcLp);
+        wcLp.topMargin = dp(3);
+        pillCol.addView(wifiChip, wcLp);
+
+        LinearLayout.LayoutParams pcLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        pcLp.leftMargin = dp(8);
+        heroTop.addView(pillCol, pcLp);
 
         hero.addView(heroTop);
 
@@ -1548,14 +1561,14 @@ public class MainActivity extends Activity implements Net.Log {
         if (wifiChip == null) return;
         // 每秒都会刷：状态没变就别重建背景，省得一直产生垃圾
         boolean on = isWifiOn();
-        String want = on ? "WiFi 已开" : "WiFi 关 · 点开";
+        String want = on ? "WiFi 开" : "WiFi 关";
         if (want.contentEquals(wifiChip.getText())) return;
         if (on) {
-            wifiChip.setText("WiFi 已开");
+            wifiChip.setText("WiFi 开");
             wifiChip.setTextColor(0xFF57C88A);
             wifiChip.setBackground(roundBg(0x1A57C88A, 11, 0));
         } else {
-            wifiChip.setText("WiFi 关 · 点开");
+            wifiChip.setText("WiFi 关");
             wifiChip.setTextColor(0xFFFF7A7A);
             wifiChip.setBackground(roundBg(0x1AFF6B6B, 11, 0));
         }
