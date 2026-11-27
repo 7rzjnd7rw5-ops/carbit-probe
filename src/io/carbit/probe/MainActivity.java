@@ -1295,6 +1295,7 @@ public class MainActivity extends Activity implements Net.Log {
             if (android.os.Build.VERSION.SDK_INT >= 33) {
                 need.add("android.permission.NEARBY_WIFI_DEVICES");
             }
+            permResume = 1;
             requestPermissions(need.toArray(new String[0]), RC_P2P_PERM);
             line("需要“附近设备/位置”权限才能建 Wi‑Fi Direct 组，请在弹窗里点允许。");
             return;
@@ -1336,6 +1337,12 @@ public class MainActivity extends Activity implements Net.Log {
         // 联动：还没和仪表组网，就先直连，连上后自动接着开流（一个动作走到底）
         if (!p2pReady && foundHost == null) {
             line("");
+            if (directBusy) {
+                // 直连已经在跑（可能是权限弹窗刚回来那一下发起的）：连上就自动投，不用再点第二下
+                directThenStart = true;
+                line("· 直连还在跑，连上就直接开投屏，不用再点");
+                return;
+            }
             line("还没连上仪表 → 先自动直连，组网成功即自动开投屏");
             doDirect(true);
             return;
@@ -1382,6 +1389,8 @@ public class MainActivity extends Activity implements Net.Log {
         stopRig();
         p2pReady = false;
         directBusy = false;
+        directThenStart = false;
+        permResume = 0;
         setRun("● 已全部停止", C_IDLE);
     }
 
@@ -1408,6 +1417,10 @@ public class MainActivity extends Activity implements Net.Log {
 
     /** 直连：走 Wi‑Fi Direct 找仪表，用的是 p2p 独立接口，手机原来的流量/Wi‑Fi 不受影响。 */
     private volatile boolean directBusy = false;
+    /** 权限弹窗回来后接着干什么：1=单机试探 2=直连 3=直连后自动开投屏。第一下点完不许断链。 */
+    private volatile int permResume = 0;
+    /** 这一轮直连连上后要不要直接开投屏（用户中途又点了一次「开始投屏」时置上）。 */
+    private volatile boolean directThenStart = false;
     /** 本机预览开关：关掉就完全不建 MediaCodec，用来对比"有没有预览对推流的影响"。 */
     private volatile boolean previewOn = true;
     private volatile boolean previewPref = true;
@@ -1421,13 +1434,18 @@ public class MainActivity extends Activity implements Net.Log {
     private void doDirect() { doDirect(false); }
 
     private void doDirect(final boolean thenStart) {
-        if (directBusy) { line("直连正在进行，等这一轮结束再点"); return; }
+        if (directBusy) {
+            if (thenStart) directThenStart = true;
+            line("直连正在进行，等这一轮结束" + (thenStart ? "就自动开投屏" : "再点"));
+            return;
+        }
         directBusy = true;
         ui.postDelayed(new Runnable() { @Override public void run() { directBusy = false; } }, 25000);
         if (!hasP2pPerm()) {
             java.util.ArrayList<String> need = new java.util.ArrayList<String>();
             need.add("android.permission.ACCESS_FINE_LOCATION");
             if (android.os.Build.VERSION.SDK_INT >= 33) need.add("android.permission.NEARBY_WIFI_DEVICES");
+            permResume = thenStart ? 3 : 2;
             requestPermissions(need.toArray(new String[0]), RC_P2P_PERM);
             line("先用“附近设备/位置”权限，才能做 Wi‑Fi Direct 搜索。");
             return;
@@ -1445,7 +1463,9 @@ public class MainActivity extends Activity implements Net.Log {
             @Override public void done(final boolean ok, final String msg) {
                 if (!ok) {
                     if (directBtn != null) directBtn.setBusy(false, null);
-                    line("直连失败：" + msg + (thenStart ? "（投屏已取消）" : ""));
+                    boolean wanted = thenStart || directThenStart;
+                    directThenStart = false;
+                    line("直连失败：" + msg + (wanted ? "（投屏已取消，可再点一次开始投屏重试）" : ""));
                     p2pReady = false;
                     setRun("✗ Wi‑Fi Direct 直连失败", C_BAD);
                     return;
@@ -1467,9 +1487,11 @@ public class MainActivity extends Activity implements Net.Log {
                     foundHost = ip;
                     p2pReady = true;
                 }
+                boolean doStart = thenStart || directThenStart;
+                directThenStart = false;
                 if (directBtn != null) { directBtn.setBusy(false, null); directBtn.ping(); }
                 startHeartbeat();
-                if (thenStart) {
+                if (doStart) {
                     setRun("✓ 组网成功，1 秒后自动开始投屏…", C_OK);
                     line("✓ 组网成功 → 自动开始投屏（不用再点第二个按钮）");
                     ui.postDelayed(new Runnable() {
@@ -1620,8 +1642,27 @@ public class MainActivity extends Activity implements Net.Log {
         super.onRequestPermissionsResult(code, perms, res);
         if (code != RC_P2P_PERM) return;
         boolean ok = res.length > 0 && res[0] == android.content.pm.PackageManager.PERMISSION_GRANTED;
-        line(ok ? "权限已授权，继续试探" : "权限未授予，p2p 建不了组（可在系统设置里给“附近设备”权限后重试）");
-        if (ok) {
+        int target = permResume;
+        permResume = 0;
+        if (!ok) {
+            line("权限未授予，p2p 建不了组（可在系统设置里给“附近设备”权限后重试）");
+            if (directBtn != null) directBtn.setBusy(false, null);
+            if (target == 3) setRun("✗ 没给权限，投屏取消", C_BAD);
+            return;
+        }
+        // 只授了一半（比如给了位置没给“附近设备”）：再要一次会弹窗循环，直接说清楚停在这里
+        if (!hasP2pPerm()) {
+            line("权限只授了一部分（还差“附近设备”），去系统设置里补上再来");
+            if (directBtn != null) directBtn.setBusy(false, null);
+            if (target == 3) setRun("✗ 权限不全，投屏取消", C_BAD);
+            return;
+        }
+        line("权限已授权 → 接着刚才那一步走");
+        if (target == 3) {
+            ui.postDelayed(new Runnable() { @Override public void run() { doStartAll(); } }, 300);
+        } else if (target == 2) {
+            ui.postDelayed(new Runnable() { @Override public void run() { doDirect(); } }, 300);
+        } else {
             ui.postDelayed(new Runnable() { @Override public void run() { doIccoa(); } }, 300);
         }
     }
