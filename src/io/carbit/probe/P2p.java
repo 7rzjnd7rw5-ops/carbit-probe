@@ -222,6 +222,38 @@ public class P2p {
         });
     }
 
+    /** 只查"此刻有没有现成的 P2P 组"，不建组、不连、不改任何状态：给启动自检轮询用。 */
+    public interface CbGroup { void done(boolean ok, String detail); }
+
+    public static void queryGroup(final Context ctx, final CbGroup cb) {
+        final android.content.Context app = ctx.getApplicationContext();
+        final WifiP2pManager mgr = (WifiP2pManager) app.getSystemService(Context.WIFI_P2P_SERVICE);
+        if (mgr == null) { cb.done(false, "系统没有 WifiP2pManager"); return; }
+        final WifiP2pManager.Channel ch = mgr.initialize(app, Looper.getMainLooper(), null);
+        final java.util.concurrent.atomic.AtomicBoolean fired = new java.util.concurrent.atomic.AtomicBoolean();
+        final android.os.Handler h = new android.os.Handler(Looper.getMainLooper());
+        try {
+            mgr.requestGroupInfo(ch, new WifiP2pManager.GroupInfoListener() {
+                @Override public void onGroupInfoAvailable(android.net.wifi.p2p.WifiP2pGroup grp) {
+                    if (!fired.compareAndSet(false, true)) return;
+                    if (grp != null && grp.getNetworkName() != null) {
+                        cb.done(true, "组 " + grp.getNetworkName()
+                                + (grp.isGroupOwner() ? "（本机=GO）" : "（本机=CLIENT）")
+                                + "，组主地址 " + goIpGuess());
+                    } else {
+                        cb.done(false, "没有现成的组");
+                    }
+                }
+            });
+        } catch (Throwable t) { cb.done(false, "查询异常 " + t); return; }
+        // 有些机型 requestGroupInfo 会不回：3 秒兜底当"没有"，免得轮询卡死
+        h.postDelayed(new Runnable() {
+            @Override public void run() {
+                if (fired.compareAndSet(false, true)) cb.done(false, "查询超时");
+            }
+        }, 3000);
+    }
+
     static String reasonText(int r) {
         switch (r) {
             case WifiP2pManager.P2P_UNSUPPORTED: return "设备不支持 p2p";

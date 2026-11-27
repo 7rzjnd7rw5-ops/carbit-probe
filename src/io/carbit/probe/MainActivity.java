@@ -116,6 +116,8 @@ public class MainActivity extends Activity implements Net.Log {
         };
         ui.post(roundTick);
         ui.postDelayed(new Runnable() { @Override public void run() { watchdogTick(); } }, 3000);
+        // 启动自检：车通电后仪表往往会自己把 P2P 组建好，App 一开就查，有组就自动开投屏，不用点按钮
+        ui.postDelayed(new Runnable() { @Override public void run() { bootPoll(); } }, 1500);
 
         // 手动锁屏 / 息屏会让 CarWith 的 MediaProjection 结束、10920/10921 全断，
         // 以前只能手动重来。这里监听亮屏/解锁，只要之前是在投屏，就自动重连一次。
@@ -1334,6 +1336,7 @@ public class MainActivity extends Activity implements Net.Log {
 
     /** 一键上车：先起假车机取流，2.5 秒后再把端口和推流开起来。 */
     private void doStartAll() {
+        bootAutoDone = true;   // 一旦开始（手动或自检命中），启动轮询就收手
         // 联动：还没和仪表组网，就先直连，连上后自动接着开流（一个动作走到底）
         if (!p2pReady && foundHost == null) {
             line("");
@@ -1371,6 +1374,7 @@ public class MainActivity extends Activity implements Net.Log {
     }
 
     private void doStopAll() {
+        bootAutoDone = true;   // 手动停下就别再被启动自检拉起来
         wasStreaming = false;
         try { getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); } catch (Throwable ignored) { }
         line("");
@@ -1500,6 +1504,42 @@ public class MainActivity extends Activity implements Net.Log {
                 } else {
                     setRun("✓ 直连成功，可以投给仪表了", C_OK);
                 }
+            }
+        });
+    }
+
+    /** 启动自检轮询：每 3 秒查一次有没有现成的 P2P 组，有组就自己开投屏（最多 30 次 ≈ 90 秒，命中/手动点/停止就收）。 */
+    private int bootPollTick;
+    private volatile boolean bootAutoDone;
+
+    private void bootPoll() {
+        if (bootAutoDone || wasStreaming) return;
+        if (bootPollTick++ >= 30) {
+            line("· 启动自检：90 秒没查到仪表组网，先不自动扫（点「开始投屏」手动直连）");
+            return;
+        }
+        P2p.queryGroup(this, new P2p.CbGroup() {
+            @Override public void done(final boolean ok, final String detail) {
+                ui.post(new Runnable() { @Override public void run() {
+                    if (bootAutoDone || wasStreaming) return;
+                    if (!ok) {
+                        ui.postDelayed(new Runnable() { @Override public void run() { bootPoll(); } }, 3000);
+                        return;
+                    }
+                    bootAutoDone = true;
+                    String ip = detail.contains("组主地址 ")
+                            ? detail.substring(detail.lastIndexOf(' ') + 1) : P2p.goIpGuess();
+                    if (ip != null && ip.contains(".")) {
+                        foundHost = ip;
+                        final String ipFixed = ip;
+                        ui.post(new Runnable() { @Override public void run() { if (ipField != null) ipField.setText(ipFixed); } });
+                    }
+                    p2pReady = true;
+                    line("");
+                    line("· 启动自检：仪表组网已在（" + detail + "）→ 不用点，直接开投屏");
+                    setRun("✓ 启动自检命中，正在开投屏…", C_OK);
+                    doStartAll();
+                } });
             }
         });
     }
@@ -2456,7 +2496,7 @@ public class MainActivity extends Activity implements Net.Log {
                     ok = doUpload(lan, name, data, cfg[2]);
                 }
                 if (!ok) {
-                    line("两条地址都没推上去：确认 Wi‑Fi、地址、token（连着仪表热点 VOGE-XXXX 时外网和内网都不通）");
+                    line("两条地址都没推上去：确认 Wi‑Fi、地址、token（连着仪表热点 VOGE-3764 时外网和内网都不通）");
                     line("日志已在本地留了一份：下载/CarbitProbe/" + name);
                     setRun("上传失败 · 已存本地 " + name, C_BAD);
                 } else {
@@ -3048,7 +3088,7 @@ public class MainActivity extends Activity implements Net.Log {
         final String host = target();
         line("");
         line("=== 投给仪表 " + host + " ===");
-        line("前提：手机已连上仪表的热点(VOGE-XXXX)或 Wi-Fi Direct 组网");
+        line("前提：手机已连上仪表的热点(VOGE-3764)或 Wi-Fi Direct 组网");
         setRun("● 已开端口，等仪表连入(0台)", C_RUN);
         final Rig r = new Rig();
         r.bindLog(MainActivity.this);
