@@ -469,7 +469,7 @@ public class MainActivity extends Activity implements Net.Log {
             @Override public boolean onLongClick(View v) {
                 FakeHu.AUDIO_MODE = FakeHu.AUDIO_MODE == 1 ? 0 : 1;
                 line("· 音频模式切成 " + FakeHu.AUDIO_MODE + "（"
-                        + (FakeHu.AUDIO_MODE == 1 ? "本机播：音乐/导航都由手机出，无延迟" : "走通道：PCM 由本机 AudioTrack 放") + "），重开投屏生效");
+                        + (FakeHu.AUDIO_MODE == 1 ? "本机播：导航/VR 由手机出，但实测音乐可能整条没声" : "走通道：PCM 由本机 AudioTrack 放，音乐有声、导航播报可能没声") + "），重开投屏生效；下次启动仍回到 0");
                 Toast.makeText(MainActivity.this, "音频模式 " + FakeHu.AUDIO_MODE + "，请重开投屏", Toast.LENGTH_SHORT).show();
                 try { if (fakeHu != null) fakeHu.resendFeatureConfig(); } catch (Throwable ignored) { }
                 return true;

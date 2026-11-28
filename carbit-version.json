@@ -1,7 +1,7 @@
 {
-  "versionCode": 172,
-  "versionName": "8.34",
+  "versionCode": 173,
+  "versionName": "8.35",
   "size": 385521,
-  "sha256": "b395bac2e6aa69300a8ca441923c127dad944631aae2bbd47f8f40bc8ed561be",
-  "notes": "8.34：KeepAliveService 加 WifiLock（LOW_LATENCY→HIGH_PERF 兜底）+ PARTIAL_WAKE_LOCK；灭屏后每 5 秒打一行熄屏观测（取流字节/帧、队列与已推、网卡与 IPv4、省电白名单）。实测同一 Wi-Fi 灭屏 56 秒不断：取流 520→2175 帧、已推 178→2166，无重连"
+  "sha256": "5722b6833e8fe1a5fc5935d5381e6d75fb87ba7ce14385153f63a88a8536549e",
+  "notes": "8.35：音频默认值回 0。8.24~8.34 把 FakeHu.AUDIO_MODE 声明成 1，与 onCreate 注释「每次启动从 0 开始」矛盾；实测 1 下 CarLife 不发通道包、AudioTrack 音轨不建，MediaAudio 的自动路由无对象可绑，整条音频链空转导致完全无声。改回 0 后 PCM 走通道、本机 AudioTrack 出声，自动路由（USB耳机→有线→BLE→A2DP→扬声器）才真正生效。长按「输出:xxx」仍可临时切 1。"
 }

@@ -73,12 +73,17 @@ public class FakeHu {
      * 0=通道模式（PCM 走 Media 通道，手机自己静音）
      * 1=本地/蓝牙模式（CarLife 不发通道包，音乐+导航 TTS+VR 全部在手机本机播）
      *
-     * 8.24 默认改成 1。原因：通道模式下车机端只能拿到 USAGE_MEDIA 的采集，
+     * 8.24 曾默认改成 1。理由：通道模式下车机端只能拿到 USAGE_MEDIA 的采集，
      * 导航播报走 USAGE_ASSISTANCE_NAVIGATION_GUIDANCE，播放采集 API 不允许采，
      * 于是导航声音被 CarWith 静音掉、又不会进通道 —— 哪边都听不到。
-     * 走 1 之后导航由手机自己播到蓝牙耳机，延迟也彻底没有了（不经采集/编码）。
+     *
+     * 8.35 改回 0。实测（2026-11-28 19:06 那轮，K80）在 1 下是"完全没声音"：
+     * CarLife 一个通道包都不发，本机也不出声，`ensure()` 从未被调用，
+     * 所以 MediaAudio 的路由（自动档）连音轨都没得绑，整条音频链是空转的。
+     * 而 0 模式下 11-26 19:22 那轮实测正常：119 包 / 825568 B，AudioTrack 播 117 包。
+     * 代价是导航播报可能没声（见上），需要导航时长按「输出:xxx」临时切回 1。
      */
-    public static volatile int AUDIO_MODE = 1;
+    public static volatile int AUDIO_MODE = 0;
     private boolean audioInitDone;
     private boolean previewPausedLogged;
     private int audioPackets;
