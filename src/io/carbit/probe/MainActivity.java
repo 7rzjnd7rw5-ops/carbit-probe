@@ -59,6 +59,9 @@ public class MainActivity extends Activity implements Net.Log {
     private LinearLayout panel;
     private Capture capture;
     private FakeHu fakeHu;
+    // 8.34：熄屏观测——屏灭期间每 5 秒打一行全链路数字
+    private volatile boolean screenOffFlag;
+    private android.os.Handler screenObsH;
     private Rig rig;
 
     private final StringBuilder logBuffer = new StringBuilder();
@@ -126,11 +129,15 @@ public class MainActivity extends Activity implements Net.Log {
                 if (Intent.ACTION_SCREEN_OFF.equals(a)) {
                     // 灭屏 = CarWith 的 MediaProjection 被系统停掉，10920/10921 必然断，我们拦不住，
                     // 只能保证解锁后自动把整段会话重建回来（下面 SCREEN_ON/USER_PRESENT 分支）。
-                    line("· 灭屏：CarWith 的录屏会被系统停止，投屏会断；解锁后会自动重连（投屏期间别按电源键锁屏）");
+                    screenOffFlag = true;
+                    line("· 灭屏：开始观测（旧判断说「CarWith 录屏会被停掉」，用数字验一下）");
+                    obsTick();
                     if (previewOn) { try { stopPreviewNow("锁屏了，预览已自动关闭（省电省 CPU）"); } catch (Throwable ignored) { } }
                     return;
                 }
                 if (!(Intent.ACTION_SCREEN_ON.equals(a) || Intent.ACTION_USER_PRESENT.equals(a))) return;
+                screenOffFlag = false;
+                obsTick();
                 if (!wasStreaming) return;
                 line("√ 亮屏了：上次投屏被锁屏打断，等解锁后自动重连");
                 resumeWhenUnlocked(0);
@@ -141,6 +148,7 @@ public class MainActivity extends Activity implements Net.Log {
         sif.addAction(Intent.ACTION_SCREEN_ON);
         sif.addAction(Intent.ACTION_USER_PRESENT);
         registerReceiver(screenRx, sif);
+        startScreenObsLoop();   // 8.34：熄屏观测（只在屏灭时输出）
         try {
             android.content.IntentFilter axf = new android.content.IntentFilter("io.carbit.probe.AXDUMP");
             if (android.os.Build.VERSION.SDK_INT >= 33) registerReceiver(axRx, axf, 2);
@@ -3210,6 +3218,41 @@ public class MainActivity extends Activity implements Net.Log {
     }
 
     /** 假车机：单机自证——本机连 CarLife 的 6 条 socket，走版本握手 + 视频初始化，把 H264 收回本地 */
+    /** 8.34：熄屏观测循环，只在屏灭时每 5 秒打一行。 */
+    private void startScreenObsLoop() {
+        if (screenObsH != null) return;
+        screenObsH = new android.os.Handler(android.os.Looper.getMainLooper());
+        screenObsH.postDelayed(new Runnable() {
+            @Override public void run() {
+                if (screenOffFlag) obsTick();
+                if (screenObsH != null) screenObsH.postDelayed(this, 5000);
+            }
+        }, 5000);
+    }
+
+    /** 打一行全链路数字：CarWith 还在不在出帧、我们还在不在推、网络和白名单什么状态。只读。 */
+    private void obsTick() {
+        String src;
+        FakeHu fh = fakeHu;
+        if (fh == null) src = "假车机未启动";
+        else if (!fh.isRunning()) src = "假车机已停（取流 " + fh.getVideoBytes() + "B/" + fh.getVideoFrames() + "帧）";
+        else src = fh.getVideoBytes() + "B/" + fh.getVideoFrames() + "帧";
+        String net;
+        try {
+            java.util.List<String> ips = Net.localIpv4();
+            net = Net.wlanName() + " " + (ips.isEmpty() ? "无 IPv4" : String.join(",", ips));
+        } catch (Throwable t) { net = "网络状态读取失败"; }
+        String doze;
+        try {
+            android.os.PowerManager pm = (android.os.PowerManager) getSystemService(POWER_SERVICE);
+            doze = pm.isIgnoringBatteryOptimizations(getPackageName()) ? "省电白名单" : "未加白名单";
+        } catch (Throwable t) { doze = "白名单未知"; }
+        line("· 熄屏观测 " + (screenOffFlag ? "（屏灭）" : "（屏亮）")
+                + "｜CarWith 取流 " + src
+                + "｜" + Rig.statsLine()
+                + "｜" + net + "｜" + doze);
+    }
+
     private void startKeepAlive() {
         try { startForegroundService(new android.content.Intent(this, KeepAliveService.class)); }
         catch (Throwable t) { startService(new android.content.Intent(this, KeepAliveService.class)); }

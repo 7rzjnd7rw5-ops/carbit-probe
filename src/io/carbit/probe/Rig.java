@@ -89,6 +89,15 @@ public final class Rig {
     private static volatile byte[] rvSpsPps;
     private static int rvCarCount, rvCarUsed;
 
+    /** 8.34：熄屏观测。只读计数，不动任何状态。 */
+    public static String statsLine() {
+        ArrayBlockingQueue<byte[]> q = rvQ;
+        int qs = q == null ? -1 : q.size();
+        return "仪表 队列 " + qs + "｜已推 " + rvSent + "｜拉帧 " + rvReqCount
+                + "｜CarWith 原帧 " + rvCarCount + "｜丢 " + rvDropped
+                + (rvGaps > 0 ? "｜重同步 " + rvGaps : "");
+    }
+
     /** FakeHu 每收到一帧 CarWith 画面就登记一次（顺带记住 SPS/PPS）。 */
     /** 开流时通知外壳完全释放本地预览解码器（投屏期间不跑任何 MediaCodec）。 */
     public static volatile Runnable onArmed;

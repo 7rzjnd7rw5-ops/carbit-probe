@@ -42,6 +42,13 @@ export KS=./keystore.jks KS_PASS='***' KS_ALIAS=carbit
 
 产物是 `CarbitProbe.apk`，没有 Gradle、没有 AndroidX，全部手写 View。
 
+## 最新版本：8.34（vc 172）
+
+- `KeepAliveService` 持 WifiLock（`WIFI_MODE_FULL_LOW_LATENCY`，失败退 `HIGH_PERF`）+ `PARTIAL_WAKE_LOCK`
+- 灭屏后每 5 秒打一行**熄屏观测**：取流字节/帧数、队列与已推、网卡与 IPv4、省电白名单状态
+- 实测同一 Wi-Fi 灭屏 56 秒不中断：CarWith 取流 520 → 2175 帧（≈29.5fps），已推 178 → 2166，全程无重连
+- 系统省电策略仍可能单独掐掉，需把应用加入「不受限制」白名单
+
 ## 脱敏说明
 
 这是脱敏后的公开副本，下面这些在原工程里是真实值，这里一律换成了占位符，跑起来必须自己填：
@@ -55,7 +62,7 @@ export KS=./keystore.jks KS_PASS='***' KS_ALIAS=carbit
 | 仪表 SN | `EXAMPLE-SN` |
 | 仪表 UUID | `CARBIT-EXAMPLE-UUID` |
 
-APK 产物、签名密钥（`.jks`）、NAS 部署脚本都不在这个仓库里。
+签名密钥（`.jks`）与 NAS 部署脚本不是本仓库内容。`dist/` 里放了一份由本仓库源码编译的 8.34 可执行包，与自用版同包名同签名，装一个会覆盖另一个。
 
 ## 免责
 

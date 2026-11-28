@@ -1,7 +1,7 @@
 {
-  "versionCode": 158,
-  "versionName": "8.20",
-  "size": 377329,
-  "sha256": "ad514e3849a0727678c9354608b8b1fa23657cfb7e48dc4c113db49b8d4659ac",
-  "notes": "8.20：五个功能胶囊（打字/触摸/试听/输出/坐标）全部挪到预览框下面一行、等宽排列，框里只留落点圈；预览关掉时胶囊照样在。没动音频和触摸逻辑"
+  "versionCode": 172,
+  "versionName": "8.34",
+  "size": 385521,
+  "sha256": "b395bac2e6aa69300a8ca441923c127dad944631aae2bbd47f8f40bc8ed561be",
+  "notes": "8.34：KeepAliveService 加 WifiLock（LOW_LATENCY→HIGH_PERF 兜底）+ PARTIAL_WAKE_LOCK；灭屏后每 5 秒打一行熄屏观测（取流字节/帧、队列与已推、网卡与 IPv4、省电白名单）。实测同一 Wi-Fi 灭屏 56 秒不断：取流 520→2175 帧、已推 178→2166，无重连"
 }
